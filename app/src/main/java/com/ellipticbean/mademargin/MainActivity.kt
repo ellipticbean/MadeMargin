@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -23,23 +24,31 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.ellipticbean.mademargin.data.MadeMarginDatabase
+import com.ellipticbean.mademargin.data.SavedProduct
 import com.ellipticbean.mademargin.ui.theme.MadeMarginTheme
 import java.text.NumberFormat
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,12 +58,21 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MadeMarginTheme {
+                val snackbarHostState =
+                    remember { SnackbarHostState() }
+
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
-                    containerColor = MaterialTheme.colorScheme.background
+                    containerColor = MaterialTheme.colorScheme.background,
+                    snackbarHost = {
+                        SnackbarHost(
+                            hostState = snackbarHostState
+                        )
+                    }
                 ) { innerPadding ->
                     PricingCalculator(
-                        modifier = Modifier.padding(innerPadding)
+                        modifier = Modifier.padding(innerPadding),
+                        snackbarHostState = snackbarHostState
                     )
                 }
             }
@@ -74,7 +92,8 @@ data class PricingResult(
 
 @Composable
 fun PricingCalculator(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    snackbarHostState: SnackbarHostState
 ) {
     var productName by remember { mutableStateOf("") }
     var materialsCost by remember { mutableStateOf("") }
@@ -95,6 +114,18 @@ fun PricingCalculator(
     val numberKeyboard = KeyboardOptions(
         keyboardType = KeyboardType.Decimal
     )
+
+    val context = LocalContext.current
+
+    val database = remember {
+        MadeMarginDatabase.getDatabase(context)
+    }
+
+    val savedProductDao = remember {
+        database.savedProductDao()
+    }
+
+    val coroutineScope = rememberCoroutineScope()
 
     Column(
         modifier = modifier
@@ -350,6 +381,82 @@ fun PricingCalculator(
                 productName = productName,
                 result = pricing
             )
+
+            OutlinedButton(
+                onClick = {
+                    if (productName.isBlank()) {
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar(
+                                "Enter a product name before saving."
+                            )
+                        }
+
+                        return@OutlinedButton
+                    }
+
+                    val product = SavedProduct(
+                        productName = productName.trim(),
+
+                        materialsCost =
+                            materialsCost.toDoubleOrNull() ?: 0.0,
+
+                        laborHours =
+                            laborHours.toDoubleOrNull() ?: 0.0,
+
+                        hourlyRate =
+                            hourlyRate.toDoubleOrNull() ?: 0.0,
+
+                        otherCosts =
+                            otherCosts.toDoubleOrNull() ?: 0.0,
+
+                        sellingFeePercent =
+                            sellingFee.toDoubleOrNull() ?: 0.0,
+
+                        profitMarginPercent =
+                            profitMargin.toDoubleOrNull() ?: 0.0,
+
+                        laborCost =
+                            pricing.laborCost,
+
+                        totalCost =
+                            pricing.totalCost,
+
+                        sellingFees =
+                            pricing.sellingFees,
+
+                        profit =
+                            pricing.profit,
+
+                        recommendedPrice =
+                            pricing.recommendedPrice
+                    )
+
+                    coroutineScope.launch {
+                        savedProductDao.insertProduct(product)
+
+                        snackbarHostState.showSnackbar(
+                            "${product.productName} saved."
+                        )
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(18.dp),
+                border = BorderStroke(
+                    width = 1.5.dp,
+                    color = MaterialTheme.colorScheme.secondary
+                ),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.secondary
+                )
+            ) {
+                Text(
+                    text = "Save Product",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
 
         Spacer(
@@ -471,11 +578,6 @@ fun PricingResultCard(
             modifier = Modifier.padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-
-            // =================================================
-            // RESULT TITLE
-            // =================================================
-
             Column(
                 verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
@@ -496,10 +598,6 @@ fun PricingResultCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-
-            // =================================================
-            // RECOMMENDED PRICE
-            // =================================================
 
             Surface(
                 modifier = Modifier.fillMaxWidth(),
@@ -530,10 +628,6 @@ fun PricingResultCard(
                     )
                 }
             }
-
-            // =================================================
-            // COST BREAKDOWN
-            // =================================================
 
             Column(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
