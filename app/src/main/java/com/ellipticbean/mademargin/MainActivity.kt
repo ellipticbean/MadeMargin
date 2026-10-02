@@ -303,7 +303,13 @@ fun PricingCalculator(
     var result by remember {
         mutableStateOf<PricingResult?>(null)
     }
+    var editingProductId by remember {
+        mutableStateOf<Long?>(null)
+    }
 
+    var editingProductCreatedAt by remember {
+        mutableStateOf<Long?>(null)
+    }
     var errorMessage by remember {
         mutableStateOf<String?>(null)
     }
@@ -317,7 +323,8 @@ fun PricingCalculator(
 
     LaunchedEffect(productToLoad?.id) {
         productToLoad?.let { product ->
-
+            editingProductId = product.id
+            editingProductCreatedAt = product.createdAt
             productName =
                 product.productName
 
@@ -678,6 +685,9 @@ fun PricingCalculator(
 
                     val product =
                         SavedProduct(
+                            id =
+                                editingProductId ?: 0,
+
                             productName =
                                 productName.trim(),
 
@@ -724,17 +734,36 @@ fun PricingCalculator(
                                 pricing.profit,
 
                             recommendedPrice =
-                                pricing.recommendedPrice
+                                pricing.recommendedPrice,
+
+                            createdAt =
+                                editingProductCreatedAt
+                                    ?: System.currentTimeMillis()
                         )
 
                     coroutineScope.launch {
-                        savedProductDao
-                            .insertProduct(product)
+                        if (editingProductId == null) {
+                            val newId =
+                                savedProductDao
+                                    .insertProduct(product)
 
-                        snackbarHostState
-                            .showSnackbar(
-                                "${product.productName} saved."
-                            )
+                            editingProductId = newId
+                            editingProductCreatedAt =
+                                product.createdAt
+
+                            snackbarHostState
+                                .showSnackbar(
+                                    "${product.productName} saved."
+                                )
+                        } else {
+                            savedProductDao
+                                .updateProduct(product)
+
+                            snackbarHostState
+                                .showSnackbar(
+                                    "${product.productName} updated."
+                                )
+                        }
                     }
                 },
                 modifier = Modifier
@@ -759,7 +788,12 @@ fun PricingCalculator(
                         )
             ) {
                 Text(
-                    text = "Save Product",
+                    text =
+                        if (editingProductId == null) {
+                            "Save Product"
+                        } else {
+                            "Update Product"
+                        },
                     fontWeight =
                         FontWeight.Bold
                 )

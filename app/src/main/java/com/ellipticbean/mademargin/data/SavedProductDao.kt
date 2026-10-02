@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -25,6 +26,11 @@ interface SavedProductDao {
     suspend fun insertProduct(
         product: SavedProduct
     ): Long
+
+    @Update
+    suspend fun updateProduct(
+        product: SavedProduct
+    )
 
     @Delete
     suspend fun deleteProduct(
